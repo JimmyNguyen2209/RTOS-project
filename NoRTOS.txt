@@ -1,0 +1,95 @@
+#define BLYNK_TEMPLATE_ID "TMPL6wJcBxjn-"
+#define BLYNK_TEMPLATE_NAME "cambien"
+#define BLYNK_AUTH_TOKEN "iGEpAMfrVuXnycDcnAXAjgACVN05CBrN"
+
+#include <Wire.h>
+#include <WiFi.h>
+#include <BlynkSimpleEsp32.h>
+#include <LiquidCrystal_I2C.h>
+#include <DHT.h>
+#include <WiFiClient.h>
+
+#define DHTPIN 5           // Pin kết nối cảm biến DHT
+#define DHTTYPE DHT22      // Loại cảm biến DHT
+#define FIRE_SENSOR_PIN 17 // Pin kết nối cảm biến lửa
+#define BUZZER_PIN 33      // Pin còi báo động
+
+// Khai báo đối tượng
+DHT dht(DHTPIN, DHTTYPE);
+LiquidCrystal_I2C lcd(0x27, 16, 2); // Địa chỉ I2C của LCD
+
+// Thông tin WiFi và Blynk
+char auth[] = "iGEpAMfrVuXnycDcnAXAjgACVN05CBrN"; // Thay bằng Auth Token của bạn
+char ssid[] = "Cong Buu";              // Thay bằng SSID WiFi
+char pass[] = "0903817214             ";          // Thay bằng mật khẩu WiFi
+
+void setup() {
+  Serial.begin(115200);
+
+  // Khởi tạo Blynk và cảm biến
+  Blynk.begin(auth, ssid, pass);
+  dht.begin();
+  
+  // Khởi tạo LCD
+  lcd.init();
+  lcd.backlight();
+  lcd.clear();
+  lcd.print("System Ready!");
+  delay(2000);
+  lcd.clear();
+
+  // Cài đặt pin
+  pinMode(FIRE_SENSOR_PIN, INPUT);
+  pinMode(BUZZER_PIN, OUTPUT);
+}
+
+void loop() {
+  Blynk.run(); // Chạy Blynk
+
+  // Đọc nhiệt độ, độ ẩm từ DHT
+  float h = dht.readHumidity();
+  float t = dht.readTemperature();
+  
+  // Đọc trạng thái cảm biến lửa
+  int fireDetected = digitalRead(FIRE_SENSOR_PIN);
+
+  // Kiểm tra lỗi cảm biến
+  if (isnan(h) || isnan(t)) {
+    Serial.println("Lỗi đọc cảm biến!");
+    lcd.setCursor(0, 0);
+    lcd.print("Sensor Error   ");
+    delay(2000);
+    return;
+  }
+
+  // Gửi dữ liệu lên Blynk
+  Blynk.virtualWrite(V0, t); // Gửi nhiệt độ lên widget V0
+  Blynk.virtualWrite(V1, h); // Gửi độ ẩm lên widget V1
+  Blynk.virtualWrite(V4, !fireDetected); // Gửi trạng thái cảm biến lửa lên widget V4
+
+  // Hiển thị dữ liệu lên LCD
+  if (fireDetected == HIGH) { // Không phát hiện lửa
+    lcd.setCursor(0, 0);
+    lcd.print("Temp:     ");
+    lcd.print(t, 1);
+    lcd.print("C");
+    lcd.setCursor(0, 1);
+    lcd.print("Humidity: ");
+    lcd.print(h, 1);
+    lcd.print("%");
+    digitalWrite(BUZZER_PIN, LOW); // Tắt còi
+  } else { // Phát hiện lửa
+    lcd.setCursor(0, 0);
+    lcd.print("FIRE ALERT!");
+    lcd.setCursor(0, 1);
+    lcd.print("T:");
+    lcd.print(t, 1);
+    lcd.print("C H:");
+    lcd.print(h, 1);
+    lcd.print("%");
+    digitalWrite(BUZZER_PIN, HIGH); // Bật còi
+    Blynk.logEvent("fire_alert", "Có Cháy"); // Gửi sự kiện logEvent
+  }
+
+  delay(1000); // Chờ 1 giây trước khi đọc lại
+}
